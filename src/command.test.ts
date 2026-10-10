@@ -46,4 +46,13 @@ test("launch defaults drop automation switches and do not forge a fingerprint", 
   assert.equal(args.includes("--fingerprint"), false);
   assert.equal(args.includes("--test-type"), false);
   assert.equal(args.includes("swiftshader"), false);
+  assert.equal(args.includes("--headless"), false);
+});
+
+test("display mode stays on X11 and does not opt into SwiftShader", () => {
+  const args = chromeLaunchArgs("display").join(" ");
+  assert.match(args, /--ozone-platform=x11/);
+  assert.match(args, /--window-size=1366,768/);
+  assert.equal(args.includes("swiftshader"), false);
+  assert.equal(args.includes("--headless"), false);
 });

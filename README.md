@@ -54,7 +54,9 @@ A bad request is HTTP 400 `invalid_request`. Navigation failure is 502 `navigati
 
 ## What this slice changes
 
-Launch uses stock Chrome with a single coherent profile: `en-US`, `America/New_York`, language `en-US,en`, and a 1366×768 viewport. It drops Playwright's `--enable-automation` and `--enable-unsafe-swiftshader` defaults, and it does not pass `--test-type`. `navigator.webdriver` is left unset by disabling the `AutomationControlled` blink feature. The user agent keeps the launched Chrome major version and the host platform, without the `HeadlessChrome` token.
+Launch uses stock Chrome with a single coherent profile: `en-US`, `America/New_York`, language `en-US,en`, and a 1366×768 viewport. It drops Playwright's `--enable-automation` and `--enable-unsafe-swiftshader` defaults, and it does not pass `--test-type`. `navigator.webdriver` is left unset by disabling the `AutomationControlled` blink feature.
+
+When `DISPLAY` is set, Chrome runs on that X server instead of Playwright's headless mode. Headless mode puts `HeadlessChrome` in worker user agents and starts the GPU process with `--use-angle=swiftshader-webgl`. Display mode keeps the binary's own user agent for both pages and workers, and it does not opt into SwiftShader. Without `DISPLAY`, the user agent keeps the launched Chrome major version and the host platform, without the `HeadlessChrome` token on the page.
 
 Canvas, WebGL, audio, and fonts stay whatever that Chrome build actually exposes. Forging those values in JavaScript would disagree with the rest of the browser.
 
