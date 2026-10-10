@@ -4,6 +4,7 @@ import {
   chromeLaunchArgs,
   chromeUserAgent,
   ignoredAutomationArgs,
+  launchMode,
   resolveChromeExecutable,
   stealthProfile,
 } from "./profile.js";
@@ -39,11 +40,13 @@ type PageSnapshot = {
 
 export async function openPage(url: string, timeoutMs: number): Promise<OpenedPage> {
   const executablePath = await resolveChromeExecutable();
+  const mode = launchMode();
   const browser = await chromium.launch({
     executablePath,
-    headless: true,
+    headless: mode === "headless",
+    chromiumSandbox: true,
     ignoreDefaultArgs: [...ignoredAutomationArgs],
-    args: chromeLaunchArgs(),
+    args: chromeLaunchArgs(mode),
   });
   try {
     const context = await browser.newContext({
@@ -51,7 +54,7 @@ export async function openPage(url: string, timeoutMs: number): Promise<OpenedPa
       timezoneId: stealthProfile.timezoneId,
       viewport: { ...stealthProfile.viewport },
       colorScheme: stealthProfile.colorScheme,
-      userAgent: chromeUserAgent(browser.version()),
+      userAgent: mode === "headless" ? chromeUserAgent(browser.version()) : undefined,
       extraHTTPHeaders: { "Accept-Language": stealthProfile.acceptLanguage },
     });
     const page = await context.newPage();
