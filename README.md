@@ -1,6 +1,6 @@
 # DeepLook
 
-DeepLook is a private agent browser. This slice opens one URL in stock Chrome and returns the visible page text. A later search API will sit on top of it. That API is not in this slice.
+DeepLook is a private agent browser. This slice opens one URL in stock Chrome and returns the visible page text, either from the `deeplook open` command or from a local HTTP API. A later search API will sit on top of it. Search and ranking are not in this slice.
 
 The browser is original code. It does not include CloakBrowser, Lightpanda, or the REA reverse-engineering toolkit.
 
@@ -26,6 +26,31 @@ If Chrome is not at `/opt/google/chrome/chrome` or `/usr/bin/google-chrome-stabl
 ```bash
 npm test
 ```
+
+## HTTP API
+
+The API calls the same browser as the command. It does not keep its own launch flags.
+
+```bash
+npm install
+npm run build
+npm run api
+```
+
+The server listens on `127.0.0.1:47231`. Override the bind address with `DEEPLOOK_HOST` and `DEEPLOOK_PORT`. `DEEPLOOK_CHROME` is the same Chrome binary the command uses.
+
+`GET /health` returns `{"ok":true}`.
+
+`POST /v1/open` takes JSON `{"url":"https://example.com"}`. `timeoutMs` is optional, an integer from 1 to 120000, and defaults to 30000. A successful response is the same JSON object as `deeplook open --json`: final URL, title, visible text, and the locale, timezone, viewport, user agent, and `navigator.webdriver` value the page saw.
+
+```bash
+curl -s http://127.0.0.1:47231/health
+curl -s -X POST http://127.0.0.1:47231/v1/open \
+  -H 'content-type: application/json' \
+  -d '{"url":"https://example.com"}'
+```
+
+A bad request is HTTP 400 `invalid_request`. Navigation failure is 502 `navigation_failed`. A timeout is 504 `timeout`. A bot-check or challenge page is 422 `challenge`: the response includes the final URL, title, and the marker that matched, and it does not include the challenge page text. Unknown paths are 404 `not_found`. The API does not solve captchas.
 
 ## What this slice changes
 
