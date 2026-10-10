@@ -2,7 +2,7 @@
   "name": "deeplook",
   "version": "0.1.0",
   "private": true,
-  "description": "Local agent browser that opens one URL and returns the page text.",
+  "description": "Local agent browser and HTTP API that open one URL and return the page text.",
   "type": "module",
   "bin": {
     "deeplook": "./dist/cli.js"
@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc",
     "test": "tsc && node --test dist/*.test.js",
-    "open": "node dist/cli.js"
+    "open": "node dist/cli.js",
+    "api": "node dist/serve.js"
   },
   "engines": {
     "node": ">=22.14"
