@@ -1,0 +1,25 @@
+{
+  "name": "deeplook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent browser CLI that opens one public URL and returns the page text.",
+  "type": "module",
+  "bin": {
+    "deeplook": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "tsc && node --test dist/*.test.js",
+    "open": "node dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22.14"
+  },
+  "dependencies": {
+    "playwright-core": "1.56.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.0",
+    "typescript": "5.9.3"
+  }
+}
