@@ -1,6 +1,6 @@
 # DeepLook browser
 
-DeepLook is the private browser engine and command-line tool. It opens one public URL in stock Chrome and returns the visible page text. The HTTP adapter runs from a separate private repository and calls this CLI as a child process. Search and Nymetric research live outside this repository.
+DeepLook is the private browser engine and command-line tool. It opens one public URL in stock Chrome and returns the visible page text. The HTTP adapter runs from the separate private [DeepLook-API repository](https://github.com/sayhitogambit/DeepLook-API) and calls this CLI as a child process. Search and Nymetric research live outside this repository.
 
 The browser is original code. It does not include CloakBrowser, Lightpanda, or the REA reverse-engineering toolkit. It does not solve captchas.
 
