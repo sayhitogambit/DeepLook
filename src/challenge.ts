@@ -1,6 +1,6 @@
 /**
- * Interstitial titles and short block pages. A long article that happens to
- * mention one of these phrases is left alone. This does not solve the check.
+ * Interstitial titles and block pages. A long article that happens to mention
+ * one of these phrases is left alone. This does not solve the check.
  */
 const titleMarkers = [
   "just a moment",
@@ -27,10 +27,14 @@ const shortPageMarkers = [
 const shortPageLimit = 2_500;
 
 export function challengeMarker(title: string, text: string): string | undefined {
-  const fromTitle = firstMarker(title, titleMarkers);
+  const normalizedTitle = title.toLowerCase().trim().replace(/[.!?]+$/, "");
+  const fromTitle = titleMarkers.find((marker) => normalizedTitle === marker);
   if (fromTitle !== undefined) return fromTitle;
   const trimmed = text.trim();
-  if (trimmed.length > shortPageLimit) return undefined;
+  if (trimmed.length > shortPageLimit) {
+    const beginning = trimmed.slice(0, 500).toLowerCase();
+    return shortPageMarkers.find((marker) => beginning.startsWith(marker));
+  }
   return firstMarker(trimmed, shortPageMarkers);
 }
 

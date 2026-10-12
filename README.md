@@ -37,11 +37,11 @@ npm run build
 npm run api
 ```
 
-The server listens on `127.0.0.1:47231`. Override the bind address with `DEEPLOOK_HOST` and `DEEPLOOK_PORT`. `DEEPLOOK_CHROME` is the same Chrome binary the command uses.
+The server listens on `127.0.0.1:47231`. Override the bind address with `DEEPLOOK_HOST` and `DEEPLOOK_PORT`. Binding to any non-loopback address requires `DEEPLOOK_API_TOKEN`; send it as `Authorization: Bearer <token>` on `/v1/open`. Keep that token in the environment and do not put the API directly on the public internet without TLS. `DEEPLOOK_CHROME` is the same Chrome binary the command uses.
 
 `GET /health` returns `{"ok":true}`.
 
-`POST /v1/open` takes JSON `{"url":"https://example.com"}`. `timeoutMs` is optional, an integer from 1 to 120000, and defaults to 30000. A successful response is the same JSON object as `deeplook open --json`: final URL, title, visible text, and the locale, timezone, viewport, user agent, and `navigator.webdriver` value the page saw.
+`POST /v1/open` takes JSON `{"url":"https://example.com"}`. `timeoutMs` is optional, an integer from 1 to 120000, and defaults to 30000. URLs must resolve only to public addresses and use the standard HTTP or HTTPS port. A successful response is the same JSON object as `deeplook open --json`: final URL, upstream HTTP status, title, visible text, and the locale, timezone, viewport, user agent, and `navigator.webdriver` value the page saw. The browser blocks redirects and page resources to private addresses. Each connection uses a checked, pinned DNS answer.
 
 ```bash
 curl -s http://127.0.0.1:47231/health
@@ -50,7 +50,7 @@ curl -s -X POST http://127.0.0.1:47231/v1/open \
   -d '{"url":"https://example.com"}'
 ```
 
-A bad request is HTTP 400 `invalid_request`. Navigation failure is 502 `navigation_failed`. A timeout is 504 `timeout`. A bot-check or challenge page is 422 `challenge`: the response includes the final URL, title, and the marker that matched, and it does not include the challenge page text. Unknown paths are 404 `not_found`. The API does not solve captchas.
+A bad request is HTTP 400 `invalid_request`. An invalid bearer token is 401 `unauthorized`. Navigation failure, including an upstream HTTP error, is 502 `navigation_failed`. A timeout is 504 `timeout`. A bot-check or challenge page is 422 `challenge`: the response includes the final URL, title, and the marker that matched, and it does not include the challenge page text. When two browser opens are already active, further requests get 503 `busy`. Unknown paths are 404 `not_found`. The API does not solve captchas.
 
 ## What this slice changes
 

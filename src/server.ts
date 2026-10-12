@@ -1,20 +1,35 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 
-import { challengeMarker } from "./challenge.js";
 import type { OpenedPage } from "./openPage.js";
+import { pageProblem } from "./pageResult.js";
+import {
+  defaultAddressResolver,
+  UnsafeUrlError,
+  validatePublicUrl,
+  type AddressResolver,
+} from "./security.js";
 
-export type PageOpener = (url: string, timeoutMs: number) => Promise<OpenedPage>;
+export type PageOpener = (url: string, timeoutMs: number, signal: AbortSignal) => Promise<OpenedPage>;
+export type ApiServerOptions = {
+  authorizationToken?: string;
+  addressResolver?: AddressResolver;
+  maxConcurrent?: number;
+  launchSlackMs?: number;
+};
 
 const defaultTimeoutMs = 30_000;
 const maxTimeoutMs = 120_000;
 const maxBodyBytes = 65_536;
-const launchSlackMs = 20_000;
+const defaultLaunchSlackMs = 20_000;
 
 export type ApiErrorCode =
   | "invalid_request"
   | "navigation_failed"
   | "timeout"
   | "challenge"
+  | "unauthorized"
+  | "busy"
   | "not_found";
 
 type ApiErrorBody = {
@@ -43,9 +58,21 @@ class DeadlineError extends Error {
   }
 }
 
-export function createApiServer(open: PageOpener): Server {
+export function createApiServer(open: PageOpener, options: ApiServerOptions = {}): Server {
+  const maxConcurrent = options.maxConcurrent ?? 2;
+  if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) {
+    throw new Error("maxConcurrent must be a positive integer.");
+  }
+  let active = 0;
   return createServer((request, response) => {
-    void route(request, response, open);
+    void route(request, response, open, options, {
+      acquire: () => {
+        if (active >= maxConcurrent) return false;
+        active += 1;
+        return true;
+      },
+      release: () => { active -= 1; },
+    });
   });
 }
 
@@ -53,6 +80,8 @@ async function route(
   request: IncomingMessage,
   response: ServerResponse,
   open: PageOpener,
+  options: ApiServerOptions,
+  slots: { acquire: () => boolean; release: () => void },
 ): Promise<void> {
   const path = (request.url ?? "/").split("?")[0];
   if (request.method === "GET" && path === "/health") {
@@ -60,7 +89,12 @@ async function route(
     return;
   }
   if (request.method === "POST" && path === "/v1/open") {
-    await openRoute(request, response, open);
+    if (options.authorizationToken !== undefined &&
+      !hasBearerToken(request.headers.authorization, options.authorizationToken)) {
+      sendError(response, "unauthorized", "A valid bearer token is required.");
+      return;
+    }
+    await openRoute(request, response, open, options, slots);
     return;
   }
   sendError(response, "not_found", "Not found.");
@@ -70,6 +104,8 @@ async function openRoute(
   request: IncomingMessage,
   response: ServerResponse,
   open: PageOpener,
+  options: ApiServerOptions,
+  slots: { acquire: () => boolean; release: () => void },
 ): Promise<void> {
   let raw: string;
   try {
@@ -98,13 +134,34 @@ async function openRoute(
   }
 
   try {
-    const page = await openWithin(open, input.url, input.timeoutMs);
-    const marker = challengeMarker(page.title, page.text);
-    if (marker !== undefined) {
+    await validatePublicUrl(input.url, options.addressResolver ?? defaultAddressResolver);
+  } catch (cause) {
+    const message = cause instanceof UnsafeUrlError ? cause.message : "Could not validate URL.";
+    sendError(response, "invalid_request", message);
+    return;
+  }
+  if (!slots.acquire()) {
+    sendError(response, "busy", "Too many browser requests are active.");
+    return;
+  }
+
+  try {
+    const page = await openWithin(open, input.url, input.timeoutMs, request, response,
+      options.launchSlackMs ?? defaultLaunchSlackMs);
+    await validatePublicUrl(page.finalUrl, options.addressResolver ?? defaultAddressResolver);
+    const problem = pageProblem(page);
+    if (problem?.kind === "challenge") {
       sendError(response, "challenge", "The site returned a bot check instead of the page.", {
         finalUrl: page.finalUrl,
         title: page.title,
-        marker,
+        marker: problem.marker,
+      });
+      return;
+    }
+    if (problem?.kind === "upstream_http") {
+      sendError(response, "navigation_failed", `Upstream returned HTTP ${problem.status}.`, {
+        finalUrl: page.finalUrl,
+        title: page.title,
       });
       return;
     }
@@ -116,6 +173,8 @@ async function openRoute(
       return;
     }
     sendError(response, "navigation_failed", message);
+  } finally {
+    slots.release();
   }
 }
 
@@ -153,23 +212,52 @@ function readOpenInput(value: unknown): OpenInput {
   return { ok: true, url: body.url, timeoutMs: body.timeoutMs };
 }
 
-function openWithin(open: PageOpener, url: string, timeoutMs: number): Promise<OpenedPage> {
-  const deadlineMs = timeoutMs + launchSlackMs;
+function openWithin(
+  open: PageOpener,
+  url: string,
+  timeoutMs: number,
+  request: IncomingMessage,
+  response: ServerResponse,
+  slackMs: number,
+): Promise<OpenedPage> {
+  const deadlineMs = timeoutMs + slackMs;
   return new Promise((resolve, reject) => {
+    const controller = new AbortController();
+    const onDisconnect = () => {
+      controller.abort();
+      cleanup();
+      reject(new Error("Client disconnected."));
+    };
+    response.once("close", onDisconnect);
+    const cleanup = () => {
+      clearTimeout(timer);
+      response.off("close", onDisconnect);
+    };
     const timer = setTimeout(() => {
+      controller.abort();
+      cleanup();
       reject(new DeadlineError(deadlineMs));
     }, deadlineMs);
-    open(url, timeoutMs).then(
+    if (request.destroyed && !request.complete) controller.abort();
+    Promise.resolve().then(() => open(url, timeoutMs, controller.signal)).then(
       (page) => {
-        clearTimeout(timer);
+        cleanup();
         resolve(page);
       },
       (cause: unknown) => {
-        clearTimeout(timer);
+        cleanup();
         reject(cause);
       },
     );
   });
+}
+
+function hasBearerToken(raw: string | undefined, expected: string): boolean {
+  const match = /^Bearer (\S+)$/.exec(raw ?? "");
+  if (match === null) return false;
+  const provided = Buffer.from(match[1]);
+  const secret = Buffer.from(expected);
+  return provided.length === secret.length && timingSafeEqual(provided, secret);
 }
 
 function isTimeout(cause: unknown): boolean {
@@ -181,6 +269,7 @@ function isTimeout(cause: unknown): boolean {
 function readBody(request: IncomingMessage): Promise<string> {
   const declared = request.headers["content-length"];
   if (declared !== undefined && Number(declared) > maxBodyBytes) {
+    request.resume();
     return Promise.reject(new BodyTooLargeError());
   }
   return new Promise((resolve, reject) => {
@@ -190,7 +279,8 @@ function readBody(request: IncomingMessage): Promise<string> {
       size += chunk.length;
       if (size > maxBodyBytes) {
         reject(new BodyTooLargeError());
-        request.destroy();
+        request.removeAllListeners("data");
+        request.resume();
         return;
       }
       chunks.push(chunk);
@@ -224,6 +314,10 @@ function statusFor(code: ApiErrorCode): number {
       return 504;
     case "challenge":
       return 422;
+    case "unauthorized":
+      return 401;
+    case "busy":
+      return 503;
     case "not_found":
       return 404;
     default: {
@@ -234,10 +328,12 @@ function statusFor(code: ApiErrorCode): number {
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
+  if (response.destroyed || response.writableEnded) return;
   const payload = JSON.stringify(body);
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(payload),
+    "cache-control": "no-store",
   });
   response.end(payload);
 }

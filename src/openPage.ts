@@ -7,10 +7,13 @@ import {
   resolveChromeExecutable,
   stealthProfile,
 } from "./profile.js";
+import { startSafeProxy } from "./safeProxy.js";
+import { validatePublicUrl } from "./security.js";
 
 export type OpenedPage = {
   requestedUrl: string;
   finalUrl: string;
+  httpStatus?: number;
   title: string;
   text: string;
   truncated: boolean;
@@ -37,22 +40,40 @@ type PageSnapshot = {
   viewport: { width: number; height: number };
 };
 
-export async function openPage(url: string, timeoutMs: number): Promise<OpenedPage> {
-  const executablePath = await resolveChromeExecutable();
-  const browser = await chromium.launch({
-    executablePath,
-    headless: true,
-    ignoreDefaultArgs: [...ignoredAutomationArgs],
-    args: chromeLaunchArgs(),
-  });
+export async function openPage(url: string, timeoutMs: number, signal?: AbortSignal): Promise<OpenedPage> {
+  await validatePublicUrl(url);
+  if (signal?.aborted) throw new Error("Browser request was canceled.");
+  const proxy = await startSafeProxy();
+  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+  const abortBrowser = () => { void browser?.close(); };
+  signal?.addEventListener("abort", abortBrowser, { once: true });
   try {
+    const executablePath = await resolveChromeExecutable();
+    browser = await chromium.launch({
+      executablePath,
+      headless: true,
+      ignoreDefaultArgs: [...ignoredAutomationArgs],
+      args: [...chromeLaunchArgs(), "--proxy-bypass-list=<-loopback>"],
+    });
+    if (signal?.aborted) throw new Error("Browser request was canceled.");
     const context = await browser.newContext({
+      proxy: { server: proxy.url },
+      serviceWorkers: "block",
       locale: stealthProfile.locale,
       timezoneId: stealthProfile.timezoneId,
       viewport: { ...stealthProfile.viewport },
       colorScheme: stealthProfile.colorScheme,
       userAgent: chromeUserAgent(browser.version()),
       extraHTTPHeaders: { "Accept-Language": stealthProfile.acceptLanguage },
+    });
+    await context.route("**/*", async (route) => {
+      try {
+        await validatePublicUrl(route.request().url());
+        if (signal?.aborted) throw new Error("Browser request was canceled.");
+        await route.continue();
+      } catch {
+        await route.abort("blockedbyclient").catch(() => undefined);
+      }
     });
     const page = await context.newPage();
     const response = await page.goto(url, {
@@ -62,11 +83,13 @@ export async function openPage(url: string, timeoutMs: number): Promise<OpenedPa
     if (response === null) {
       throw new Error(`No response for ${url}`);
     }
+    await page.waitForLoadState("load", { timeout: Math.min(timeoutMs, 3_000) }).catch(() => undefined);
     const snapshot = await page.evaluate(readPage);
     const truncated = snapshot.text.length > maxTextCharacters;
     return {
       requestedUrl: url,
       finalUrl: page.url(),
+      httpStatus: response.status(),
       title: snapshot.title,
       text: truncated ? snapshot.text.slice(0, maxTextCharacters) : snapshot.text,
       truncated,
@@ -80,7 +103,12 @@ export async function openPage(url: string, timeoutMs: number): Promise<OpenedPa
       },
     };
   } finally {
-    await browser.close();
+    signal?.removeEventListener("abort", abortBrowser);
+    try {
+      await browser?.close();
+    } finally {
+      await proxy.close();
+    }
   }
 }
 

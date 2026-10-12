@@ -2,6 +2,7 @@
 
 import { helpText, parseCommand, type OutputFormat } from "./command.js";
 import { openPage, type OpenedPage } from "./openPage.js";
+import { pageProblem } from "./pageResult.js";
 
 const command = parseCommand(process.argv);
 
@@ -16,6 +17,13 @@ switch (command.kind) {
   case "open":
     try {
       const page = await openPage(command.url, command.timeoutMs);
+      const problem = pageProblem(page);
+      if (problem?.kind === "challenge") {
+        throw new Error(`The site returned a bot check (${problem.marker}).`);
+      }
+      if (problem?.kind === "upstream_http") {
+        throw new Error(`Upstream returned HTTP ${problem.status}.`);
+      }
       process.stdout.write(render(page, command.format));
     } catch (cause: unknown) {
       const message = cause instanceof Error ? cause.message : String(cause);
