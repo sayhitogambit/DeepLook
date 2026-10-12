@@ -268,6 +268,40 @@ test("timed out operations receive an abort signal", async () => {
   }
 });
 
+test("a timed out opener holds its browser slot until cleanup settles", async () => {
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => { release = resolve; });
+  let calls = 0;
+  const { server, base } = await listen(async () => {
+    calls += 1;
+    if (calls === 1) await hold;
+    return samplePage();
+  }, { maxConcurrent: 1, launchSlackMs: 0 });
+  try {
+    const first = await fetch(`${base}/v1/open`, {
+      method: "POST", body: JSON.stringify({ url: "https://example.com", timeoutMs: 1 }),
+    });
+    assert.equal(first.status, 504);
+
+    const whileCleaning = await fetch(`${base}/v1/open`, {
+      method: "POST", body: JSON.stringify({ url: "https://example.com" }),
+    });
+    assert.equal(whileCleaning.status, 503);
+    assert.equal(calls, 1);
+
+    release();
+    await new Promise((resolve) => setImmediate(resolve));
+    const afterCleanup = await fetch(`${base}/v1/open`, {
+      method: "POST", body: JSON.stringify({ url: "https://example.com" }),
+    });
+    assert.equal(afterCleanup.status, 200);
+    assert.equal(calls, 2);
+  } finally {
+    release();
+    await close(server);
+  }
+});
+
 test("disconnecting the client cancels its browser work", async () => {
   let started!: () => void;
   let canceled!: () => void;

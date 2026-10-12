@@ -147,7 +147,7 @@ async function openRoute(
 
   try {
     const page = await openWithin(open, input.url, input.timeoutMs, request, response,
-      options.launchSlackMs ?? defaultLaunchSlackMs);
+      options.launchSlackMs ?? defaultLaunchSlackMs, slots.release);
     await validatePublicUrl(page.finalUrl, options.addressResolver ?? defaultAddressResolver);
     const problem = pageProblem(page);
     if (problem?.kind === "challenge") {
@@ -173,8 +173,6 @@ async function openRoute(
       return;
     }
     sendError(response, "navigation_failed", message);
-  } finally {
-    slots.release();
   }
 }
 
@@ -219,6 +217,7 @@ function openWithin(
   request: IncomingMessage,
   response: ServerResponse,
   slackMs: number,
+  onOperationSettled: () => void,
 ): Promise<OpenedPage> {
   const deadlineMs = timeoutMs + slackMs;
   return new Promise((resolve, reject) => {
@@ -242,10 +241,12 @@ function openWithin(
     Promise.resolve().then(() => open(url, timeoutMs, controller.signal)).then(
       (page) => {
         cleanup();
+        onOperationSettled();
         resolve(page);
       },
       (cause: unknown) => {
         cleanup();
+        onOperationSettled();
         reject(cause);
       },
     );
