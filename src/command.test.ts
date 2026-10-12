@@ -19,6 +19,16 @@ test("open parses a url and json output", () => {
   });
 });
 
+test("open parses the machine output flag", () => {
+  const command = parseCommand(["node", "deeplook", "open", "https://example.com", "--machine"]);
+  assert.deepEqual(command, {
+    kind: "open",
+    url: "https://example.com",
+    format: "machine",
+    timeoutMs: 30_000,
+  });
+});
+
 test("open rejects a missing url", () => {
   const command = parseCommand(["node", "deeplook", "open"]);
   assert.equal(command.kind, "error");

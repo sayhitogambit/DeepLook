@@ -1,4 +1,4 @@
-export type OutputFormat = "text" | "json";
+export type OutputFormat = "text" | "json" | "machine";
 
 export type Command =
   | { kind: "help" }
@@ -32,6 +32,10 @@ export function parseCommand(argv: readonly string[]): Command {
       format = "json";
       continue;
     }
+    if (flag === "--machine") {
+      format = "machine";
+      continue;
+    }
     if (flag === "--timeout-ms") {
       const raw = args[index + 1];
       index += 1;
@@ -52,10 +56,11 @@ export const helpText = `DeepLook agent browser
 Open one URL in stock Chrome and print the visible page text.
 
 Usage
-  deeplook open <url> [--json] [--timeout-ms <milliseconds>]
+  deeplook open <url> [--json | --machine] [--timeout-ms <milliseconds>]
 
 Text output is the page text. JSON output also includes the final URL,
 title, and the locale, timezone, viewport, and webdriver bit the page saw.
+Machine output is a versioned JSON result for the DeepLook HTTP adapter.
 
 Environment
   DEEPLOOK_CHROME   Path to the Chrome binary. Defaults to
