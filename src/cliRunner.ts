@@ -1,6 +1,6 @@
 import { helpText, parseCommand } from "./command.js";
 import type { OpenedPage } from "./openPage.js";
-import { pageProblem } from "./pageResult.js";
+import { pageProblem, type PageProblem } from "./pageResult.js";
 
 type Writer = { write(chunk: string): unknown };
 type SignalSource = {
@@ -14,7 +14,7 @@ export type PageOpener = (url: string, timeoutMs: number, signal: AbortSignal) =
 type MachineError = {
   version: 1;
   ok: false;
-  error: "challenge" | "upstream_http" | "timeout" | "navigation_failed";
+  error: "challenge" | "access_wall" | "empty_content" | "upstream_http" | "timeout" | "navigation_failed";
   message: string;
   finalUrl?: string;
   title?: string;
@@ -39,25 +39,7 @@ export async function runCli(argv: readonly string[], open: PageOpener, io: CliI
         const page = await open(command.url, command.timeoutMs, controller.signal);
         const problem = pageProblem(page);
         if (problem !== undefined) {
-          const error: MachineError = problem.kind === "challenge"
-            ? {
-                version: 1,
-                ok: false,
-                error: "challenge",
-                message: "The site returned a bot check instead of the page.",
-                finalUrl: page.finalUrl,
-                title: page.title,
-                marker: problem.marker,
-              }
-            : {
-                version: 1,
-                ok: false,
-                error: "upstream_http",
-                message: `Upstream returned HTTP ${problem.status}.`,
-                finalUrl: page.finalUrl,
-                title: page.title,
-              };
-          writeFailure(io, command.format === "machine", error);
+          writeFailure(io, command.format === "machine", pageFailure(page, problem));
           return 1;
         }
         switch (command.format) {
@@ -94,6 +76,22 @@ export async function runCli(argv: readonly string[], open: PageOpener, io: CliI
       const unexpected: never = command;
       return unexpected;
     }
+  }
+}
+
+function pageFailure(page: OpenedPage, problem: PageProblem): MachineError {
+  const base = { version: 1, ok: false, finalUrl: page.finalUrl, title: page.title } as const;
+  switch (problem.kind) {
+    case "challenge":
+      return { ...base, error: problem.kind, marker: problem.marker,
+        message: "The site returned a bot check instead of the page." };
+    case "access_wall":
+      return { ...base, error: problem.kind, marker: problem.marker,
+        message: "The site returned an access gate instead of the requested page." };
+    case "empty_content":
+      return { ...base, error: problem.kind, message: "The page returned no readable text." };
+    case "upstream_http":
+      return { ...base, error: problem.kind, message: `Upstream returned HTTP ${problem.status}.` };
   }
 }
 

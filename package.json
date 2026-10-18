@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc",
     "test": "tsc && node --test dist/*.test.js",
+    "test:browser": "tsc && DEEPLOOK_TEST_BROWSER=1 node --test dist/browser.integration.test.js",
     "open": "node dist/cli.js"
   },
   "engines": {

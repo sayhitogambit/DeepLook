@@ -10,6 +10,8 @@ const titleMarkers = [
   "verify you are human",
   "verify you're human",
   "pardon our interruption",
+  "robot or human",
+  "prove your humanity",
 ] as const;
 
 const shortPageMarkers = [
@@ -22,13 +24,18 @@ const shortPageMarkers = [
   "cf-browser-verification",
   "please verify you are a human",
   "please complete the security check",
+  "prove your humanity",
+  "complete the challenge below",
+  "activate and hold the button to confirm",
 ] as const;
 
 const shortPageLimit = 2_500;
 
 export function challengeMarker(title: string, text: string): string | undefined {
   const normalizedTitle = title.toLowerCase().trim().replace(/[.!?]+$/, "");
-  const fromTitle = titleMarkers.find((marker) => normalizedTitle === marker);
+  // Branded challenge titles occur too (for example, Reddit's interstitial).
+  const fromTitle = titleMarkers.find((marker) => normalizedTitle === marker ||
+    normalizedTitle.endsWith(` - ${marker}`) || normalizedTitle.endsWith(` | ${marker}`));
   if (fromTitle !== undefined) return fromTitle;
   const trimmed = text.trim();
   if (trimmed.length > shortPageLimit) {

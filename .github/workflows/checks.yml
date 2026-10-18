@@ -4,9 +4,17 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   browser:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,3 +23,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npx playwright-core install --with-deps chrome
+      - run: npm run test:browser
+        env:
+          DEEPLOOK_CHROME: /usr/bin/google-chrome

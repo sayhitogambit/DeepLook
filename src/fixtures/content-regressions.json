@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Amazon",
+    "title": "Amazon.com",
+    "text": "Click the button below to continue shopping\nContinue shopping\nConditions of Use     Privacy Policy\n© 1996-2025, Amazon.com, Inc. or its affiliates",
+    "expected": "access_wall"
+  },
+  {
+    "name": "walmart",
+    "title": "Robot or human?",
+    "text": "Robot or human?\n\nActivate and hold the button to confirm that you’re human. Thank You!\n\nTerms of Use Privacy Policy Do Not Sell My Personal Information Request My Personal Information\n\n©2026 Walmart Stores, Inc.",
+    "expected": "challenge"
+  },
+  {
+    "name": "Reddit",
+    "title": "Reddit - Prove your humanity",
+    "text": "Prove your humanity\n\nWe’re committed to safety and security. But not for bots. Complete the challenge below and let us know you’re a real person.\n\nReddit, Inc. © \"2026\". All rights reserved.\nUser Agreement\nPrivacy Policy\nContent Policy\nHelp",
+    "expected": "challenge"
+  },
+  {
+    "name": "temu",
+    "title": "cabo usb para tipo c de carregamento rápido 60w - Temu Brazil",
+    "text": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+    "expected": "empty_content"
+  }
+]

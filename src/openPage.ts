@@ -1,4 +1,4 @@
-import { chromium } from "playwright-core";
+import { chromium, type Browser, type BrowserServer } from "playwright-core";
 
 import {
   chromeLaunchArgs,
@@ -9,6 +9,8 @@ import {
 } from "./profile.js";
 import { startSafeProxy } from "./safeProxy.js";
 import { validatePublicUrl } from "./security.js";
+import { Operation } from "./operation.js";
+import { browserEnvironment } from "./runtimeEnvironment.js";
 
 export type OpenedPage = {
   requestedUrl: string;
@@ -32,6 +34,7 @@ const maxTextCharacters = 200_000;
 type PageSnapshot = {
   title: string;
   text: string;
+  truncated: boolean;
   webdriver: boolean;
   userAgent: string;
   brands: string[];
@@ -40,23 +43,49 @@ type PageSnapshot = {
   viewport: { width: number; height: number };
 };
 
-export async function openPage(url: string, timeoutMs: number, signal?: AbortSignal): Promise<OpenedPage> {
-  await validatePublicUrl(url);
-  if (signal?.aborted) throw new Error("Browser request was canceled.");
-  const proxy = await startSafeProxy();
-  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
-  const abortBrowser = () => { void browser?.close(); };
-  signal?.addEventListener("abort", abortBrowser, { once: true });
+type Dependencies = {
+  validateUrl: typeof validatePublicUrl;
+  startProxy: typeof startSafeProxy;
+  launch: typeof chromium.launchServer;
+  connect: (endpoint: string, options: { timeout: number }) => Promise<Browser>;
+  resolveExecutable: typeof resolveChromeExecutable;
+};
+
+export function createPageOpener(overrides: Partial<Dependencies> = {}) {
+  const dependencies: Dependencies = {
+    validateUrl: validatePublicUrl, startProxy: startSafeProxy,
+    launch: (options) => chromium.launchServer(options),
+    connect: (endpoint, options) => chromium.connect(endpoint, options),
+    resolveExecutable: resolveChromeExecutable, ...overrides,
+  };
+  return (url: string, timeoutMs: number, signal?: AbortSignal) =>
+    openWithDependencies(url, timeoutMs, signal, dependencies);
+}
+
+export const openPage = createPageOpener();
+
+async function openWithDependencies(
+  url: string, timeoutMs: number, signal: AbortSignal | undefined, dependencies: Dependencies,
+): Promise<OpenedPage> {
+  const operation = new Operation(timeoutMs, signal);
+  let failed = false;
   try {
-    const executablePath = await resolveChromeExecutable();
-    browser = await chromium.launch({
+    operation.signal.throwIfAborted();
+    await operation.wait(dependencies.validateUrl(url));
+    const proxy = await operation.acquire(dependencies.startProxy(), (resource) => resource.close());
+    const executablePath = await operation.wait(dependencies.resolveExecutable());
+    const server = await operation.acquire(dependencies.launch({
       executablePath,
       headless: true,
+      host: "127.0.0.1",
+      chromiumSandbox: true,
+      env: browserEnvironment(),
+      timeout: operation.remainingMs(),
       ignoreDefaultArgs: [...ignoredAutomationArgs],
       args: [...chromeLaunchArgs(), "--proxy-bypass-list=<-loopback>"],
-    });
-    if (signal?.aborted) throw new Error("Browser request was canceled.");
-    const context = await browser.newContext({
+    }), closeBrowserServer);
+    const browser = await operation.wait(dependencies.connect(server.wsEndpoint(), { timeout: operation.remainingMs() }));
+    const context = await operation.wait(browser.newContext({
       proxy: { server: proxy.url },
       serviceWorkers: "block",
       locale: stealthProfile.locale,
@@ -65,34 +94,35 @@ export async function openPage(url: string, timeoutMs: number, signal?: AbortSig
       colorScheme: stealthProfile.colorScheme,
       userAgent: chromeUserAgent(browser.version()),
       extraHTTPHeaders: { "Accept-Language": stealthProfile.acceptLanguage },
-    });
-    await context.route("**/*", async (route) => {
+    }));
+    await operation.wait(context.route("**/*", async (route) => {
       try {
-        await validatePublicUrl(route.request().url());
-        if (signal?.aborted) throw new Error("Browser request was canceled.");
+        await operation.wait(dependencies.validateUrl(route.request().url()));
+        operation.signal.throwIfAborted();
         await route.continue();
       } catch {
         await route.abort("blockedbyclient").catch(() => undefined);
       }
-    });
-    const page = await context.newPage();
-    const response = await page.goto(url, {
+    }));
+    const page = await operation.wait(context.newPage());
+    const response = await operation.wait(page.goto(url, {
       waitUntil: "domcontentloaded",
-      timeout: timeoutMs,
-    });
+      timeout: operation.remainingMs(),
+    }));
     if (response === null) {
       throw new Error(`No response for ${url}`);
     }
-    await page.waitForLoadState("load", { timeout: Math.min(timeoutMs, 3_000) }).catch(() => undefined);
-    const snapshot = await page.evaluate(readPage);
-    const truncated = snapshot.text.length > maxTextCharacters;
+    await operation.wait(page.waitForLoadState("load", {
+      timeout: Math.min(operation.remainingMs(), 3_000),
+    }).catch(() => undefined));
+    const snapshot = await operation.wait(page.evaluate(readPage, maxTextCharacters));
     return {
       requestedUrl: url,
       finalUrl: page.url(),
       httpStatus: response.status(),
       title: snapshot.title,
-      text: truncated ? snapshot.text.slice(0, maxTextCharacters) : snapshot.text,
-      truncated,
+      text: snapshot.text,
+      truncated: snapshot.truncated,
       observed: {
         webdriver: snapshot.webdriver,
         userAgent: snapshot.userAgent,
@@ -102,25 +132,44 @@ export async function openPage(url: string, timeoutMs: number, signal?: AbortSig
         viewport: snapshot.viewport,
       },
     };
+  } catch (cause) {
+    failed = true;
+    if (operation.signal.aborted) throw operation.signal.reason;
+    throw cause;
   } finally {
-    signal?.removeEventListener("abort", abortBrowser);
     try {
-      await browser?.close();
-    } finally {
-      await proxy.close();
+      await operation.close();
+    } catch (cause) {
+      // Cleanup failure must not replace a useful timeout/cancellation reason.
+      if (!failed) throw cause;
     }
   }
 }
 
-function readPage(): PageSnapshot {
+async function closeBrowserServer(server: BrowserServer): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const closed = await Promise.race([
+      server.close().then(() => true, () => false),
+      new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), 2_000); }),
+    ]);
+    if (!closed) await server.kill();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function readPage(maxCharacters: number): PageSnapshot {
   const languages = Array.from(navigator.languages);
   const record = navigator as Navigator & {
     userAgentData?: { brands: Array<{ brand: string }> };
   };
   const brands = (record.userAgentData?.brands ?? []).map((brand) => brand.brand);
+  const text = document.body?.innerText ?? "";
   return {
     title: document.title,
-    text: document.body?.innerText ?? "",
+    text: text.slice(0, maxCharacters),
+    truncated: text.length > maxCharacters,
     webdriver: navigator.webdriver === true,
     userAgent: navigator.userAgent,
     brands,

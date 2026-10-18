@@ -1,3 +1,5 @@
+import { maxTimeoutMs } from "./operation.js";
+
 export type OutputFormat = "text" | "json" | "machine";
 
 export type Command =
@@ -40,8 +42,8 @@ export function parseCommand(argv: readonly string[]): Command {
       const raw = args[index + 1];
       index += 1;
       const parsed = Number(raw);
-      if (!Number.isInteger(parsed) || parsed < 1) {
-        return { kind: "error", message: "--timeout-ms expects a positive integer." };
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > maxTimeoutMs) {
+        return { kind: "error", message: `--timeout-ms expects an integer from 1 to ${maxTimeoutMs}.` };
       }
       timeoutMs = parsed;
       continue;
