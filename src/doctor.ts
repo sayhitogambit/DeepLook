@@ -28,7 +28,7 @@ export async function diagnose(): Promise<DiagnosticReport> {
   try {
     const executable = await resolveChromeExecutable();
     const { stdout } = await execute(executable, ["--version"], {
-      timeout: 3_000, maxBuffer: 8_192, env: browserEnvironment(), encoding: "utf8",
+      timeout: 3_000, killSignal: "SIGKILL", maxBuffer: 8_192, env: browserEnvironment(), encoding: "utf8",
     });
     const version = stdout.trim();
     if (!/^(?:Google Chrome(?: for Testing)?|Chromium)\s+\d/.test(version)) {

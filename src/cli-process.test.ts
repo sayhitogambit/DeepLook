@@ -9,7 +9,7 @@ import test from "node:test";
 
 import { browserEnvironment } from "./runtimeEnvironment.js";
 
-async function cli(args: string[], env: NodeJS.ProcessEnv = {}) {
+async function cli(args: string[], env: NodeJS.ProcessEnv = {}, deadlineMs = 15_000) {
   const child = spawn(process.execPath, [fileURLToPath(new URL("./cli.js", import.meta.url)), ...args], {
     env: { ...browserEnvironment(), DEEPLOOK_CHROME: "/deeplook-test/no-chrome", ...env },
     stdio: ["ignore", "pipe", "pipe"],
@@ -18,7 +18,7 @@ async function cli(args: string[], env: NodeJS.ProcessEnv = {}) {
   const stderr: Buffer[] = [];
   child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
   child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-  const timer = setTimeout(() => child.kill("SIGKILL"), 15_000);
+  const timer = setTimeout(() => child.kill("SIGKILL"), deadlineMs);
   try {
     const code = await new Promise<number | null>((resolve, reject) => {
       child.once("error", reject);
@@ -115,6 +115,28 @@ test("doctor terminates a browser version probe that stalls", { skip: process.pl
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test("doctor terminates a version probe even when it ignores SIGTERM", { skip: process.platform === "win32" }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "deeplook-doctor-resistant-"));
+  const executable = join(directory, "resistant-browser.mjs");
+  const pidFile = join(directory, "probe.pid");
+  await writeFile(executable, `#!${process.execPath}
+import { writeFileSync } from "node:fs";
+process.on("SIGTERM", () => {});
+writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+setInterval(() => {}, 1000);
+`, { mode: 0o755 });
+  try {
+    const result = await cli(["doctor", "--json"], { DEEPLOOK_CHROME: executable }, 6_000);
+    assert.equal(result.code, 1, "doctor must return without requiring the caller to kill it");
+    assert.equal(result.stderr, "");
+    assert.equal(JSON.parse(result.stdout).ok, false);
+  } finally {
+    try { process.kill(Number(await readFile(pidFile, "utf8")), "SIGKILL"); }
+    catch (error) { if (!["ENOENT", "ESRCH"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error; }
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // Catches silently falling back to local Chrome, a wrong API route, a lost
 // credential, or a request body incompatible with POST /v1/open.
 test("remote open sends the API contract and needs no local Chrome", async () => {
@@ -155,6 +177,30 @@ for (const [status, error] of [[400, "invalid_request"], [401, "unauthorized"], 
       assert.equal(JSON.parse(result.stdout).error, error);
       assert.equal(result.stderr, "");
       assert.equal((result.stdout + result.stderr).includes(secret), false);
+    } finally { await server.close(); }
+  });
+}
+
+for (const [error, text, httpStatus] of [["empty_content", "", 200],
+  ["challenge", "Please verify you are a human", 200],
+  ["access_wall", "Click the button below to continue shopping Continue shopping", 200],
+  ["upstream_http", "Upstream service failed", 503]] as const) {
+  test(`remote page classified as ${error} omits credential-reflecting metadata`, async () => {
+    const secret = "fixture-page-reflected-token";
+    const server = await apiFixture((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ...remotePage, text, httpStatus,
+        title: secret, finalUrl: `https://example.com/?reflected=${secret}` }));
+    });
+    try {
+      const result = await cli(["open", "https://example.com/article", "--machine"], {
+        DEEPLOOK_API_URL: server.endpoint, DEEPLOOK_API_TOKEN: secret,
+      });
+      assert.equal(result.code, 1);
+      assert.equal(JSON.parse(result.stdout).error, error);
+      assert.equal(result.stderr, "");
+      assert.equal((result.stdout + result.stderr).includes(secret), false,
+        "remote page metadata must not expose the credential on a failure");
     } finally { await server.close(); }
   });
 }

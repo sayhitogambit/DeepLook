@@ -30,7 +30,7 @@ node dist/cli.js doctor --json
 node dist/cli.js open https://example.com --machine --timeout-ms 30000
 ```
 
-Remote `doctor` calls `GET /health` with the configured bearer credential. It checks API liveness only; that endpoint does not verify browser execution, token permissions, or quota. Remote `open` calls `POST /v1/open` and preserves text, JSON, and machine success output. Machine failures also preserve API `invalid_request`, `unauthorized`, `quota_exceeded`, and `busy` errors. Credentials are never accepted as command flags or forwarded across API redirects, and server error messages are replaced with safe local messages.
+Remote `doctor` calls `GET /health` with the configured bearer credential. It checks API liveness only; that endpoint does not verify browser execution, token permissions, or quota. Remote `open` calls `POST /v1/open` and preserves text, JSON, and machine success output. Machine failures also preserve API `invalid_request`, `unauthorized`, `quota_exceeded`, and `busy` errors. Credentials are never accepted as command flags or forwarded across API redirects, and server error messages are replaced with safe local messages. Remote page failures omit server-provided titles and final URLs, which can also reflect credentials.
 
 API requests have a deadline covering response-body reading and a two-megabyte response cap. A remote failure is reported without falling back to local Chrome. This repository still requires building from source; a public npm release and the MCP integration are separate roadmap items.
 

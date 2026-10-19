@@ -55,7 +55,7 @@ export async function runCli(argv: readonly string[], open: PageOpener, io: CliI
         const page = await opener(command.url, command.timeoutMs, controller.signal);
         const problem = pageProblem(page);
         if (problem !== undefined) {
-          writeFailure(io, command.format === "machine", pageFailure(page, problem));
+          writeFailure(io, command.format === "machine", pageFailure(page, problem, configuration === undefined));
           return 1;
         }
         switch (command.format) {
@@ -100,8 +100,10 @@ function failureCode(cause: unknown): MachineError["error"] {
   return isTimeout(cause) ? "timeout" : "navigation_failed";
 }
 
-function pageFailure(page: OpenedPage, problem: PageProblem): MachineError {
-  const base = { version: 1, ok: false, finalUrl: page.finalUrl, title: page.title } as const;
+function pageFailure(page: OpenedPage, problem: PageProblem, includeMetadata: boolean): MachineError {
+  // Remote metadata can reflect credentials just like a server error message.
+  const base = { version: 1, ok: false,
+    ...(includeMetadata ? { finalUrl: page.finalUrl, title: page.title } : {}) } as const;
   switch (problem.kind) {
     case "challenge":
       return { ...base, error: problem.kind, marker: problem.marker,
