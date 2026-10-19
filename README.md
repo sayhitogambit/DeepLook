@@ -6,7 +6,7 @@ The browser is original code. It does not include CloakBrowser, Lightpanda, or t
 
 ## Run
 
-Requires Node.js 22.14 or newer and Google Chrome.
+Requires Node.js 22.14 or newer. Local page reads also require Google Chrome; remote API reads do not.
 
 ```bash
 npm ci
@@ -32,7 +32,46 @@ node dist/cli.js open https://example.com --machine --timeout-ms 30000
 
 Remote `doctor` calls `GET /health` with the configured bearer credential. It checks API liveness only; that endpoint does not verify browser execution, token permissions, or quota. Remote `open` calls `POST /v1/open` and preserves text, JSON, and machine success output. Machine failures also preserve API `invalid_request`, `unauthorized`, `quota_exceeded`, and `busy` errors. Credentials are never accepted as command flags or forwarded across API redirects, and server error messages are replaced with safe local messages. Remote page failures omit server-provided titles and final URLs, which can also reflect credentials.
 
-API requests have a deadline covering response-body reading and a two-megabyte response cap. A remote failure is reported without falling back to local Chrome. This repository still requires building from source; a public npm release and the MCP integration are separate roadmap items.
+API requests have a deadline covering response-body reading and a two-megabyte response cap. A remote failure is reported without falling back to local Chrome.
+
+## MCP for coding agents
+
+`deeplook mcp` exposes the `deeplook_open` tool over stdio, using the [official MCP TypeScript SDK](https://ts.sdk.modelcontextprotocol.io/v2/). Start it through your host's MCP configuration; stdout is reserved for protocol messages.
+
+After building the checkout, a generic host configuration is:
+
+```json
+{
+  "mcpServers": {
+    "deeplook": {
+      "command": "node",
+      "args": ["/absolute/path/to/DeepLook/dist/cli.js", "mcp"]
+    }
+  }
+}
+```
+
+Host configuration keys differ; configure the command and arguments in your host's MCP settings. For remote reads, supply `DEEPLOOK_API_URL` and `DEEPLOOK_API_TOKEN` through its private process environment. Do not put a real token in shared configuration. Without an endpoint, the tool uses local Chrome.
+
+Call `deeplook_open` with `{ "url": "https://example.com", "timeoutMs": 30000 }`. `timeoutMs` is optional, defaults to 30000, and accepts integers from 1 to 120000. Additional arguments are rejected. Success returns page text in `content` and the version 1 machine result in `structuredContent`. Failures return `isError: true` with a typed machine error. Page content is untrusted source material and can contain prompt injection; hosts must not treat it as instructions.
+
+Each MCP process permits one active read. Concurrent calls receive `busy`; request cancellation, stdin closure, SIGINT and SIGTERM abort active work and allow its resources to close. Browser cleanup can take up to two seconds after cancellation. Remote reads may consume account quota, including requests that are canceled after the API admitted them. This stdio adapter does not expose an HTTP MCP endpoint or solve captchas.
+
+## Installable artifact
+
+`npm pack` builds a tarball containing runtime JavaScript, package metadata and this README. Tests, source, benchmark fixtures and development documents are excluded. Install the resulting local artifact with:
+
+```bash
+npm ci
+npm pack
+npm install --global ./deeplook-0.1.0.tgz
+deeplook --version
+deeplook doctor --json
+```
+
+The installed `deeplook mcp` command can replace the `node` command and absolute script path above. `npm run test:package` verifies packing from a source tree with no built files, offline installation into an empty project with production dependencies only, and the installed CLI/MCP handshake. Its offline installation uses dependencies cached by the checkout's initial `npm ci`.
+
+The repository and package remain private. Open-source license selection, repository publication, and registry release are still pending; there is no public npm installation command yet. This milestone prepares and tests the artifact without publishing it.
 
 Text output is the visible page text. `--json` returns the final URL, title, upstream HTTP status, and the browser details observed by the page. Set `DEEPLOOK_CHROME` to a Chrome binary if it is not at `/opt/google/chrome/chrome` or `/usr/bin/google-chrome-stable`.
 

@@ -23,6 +23,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run test:package
       - run: npx playwright-core install --with-deps chrome
       - run: npm run test:browser
         env:

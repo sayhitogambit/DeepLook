@@ -71,6 +71,7 @@ Open one URL locally or through the configured DeepLook API.
 Usage
   deeplook --version
   deeplook doctor [--json]
+  deeplook mcp
   deeplook open <url> [--json | --machine] [--timeout-ms <milliseconds>]
 
 Text output is the page text. JSON output also includes the final URL,

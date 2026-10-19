@@ -1,6 +1,6 @@
 # DeepLook MCP and Package Implementation Plan
 
-> **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Deliver a working stdio MCP interface and prove the built CLI installs independently of its checkout.
 
@@ -32,10 +32,10 @@
 
 **Interfaces:** `runMcp(open: PageOpener): Promise<void>` serves the process; `deeplook_open({url, timeoutMs?})` returns the existing machine result as structured content and readable text content.
 
-- [ ] Install SDK client as a test dependency. Write a real client test asserting handshake and one advertised tool; run it and observe failure because `mcp` is missing.
-- [ ] Add exact server SDK/Zod dependencies; implement command, stdio entry and one tool. Verify discovery.
-- [ ] Write failing HTTP fixture call tests asserting authenticated wire contract, text/structured results, typed errors, remote metadata sanitization, default deadline and invalid input rejection without API requests.
-- [ ] Implement minimal shared CLI result adapter. Run full `npm test` and commit.
+- [x] Install SDK client as a test dependency. Write a real client test asserting handshake and one advertised tool; run it and observe failure because `mcp` is missing.
+- [x] Add exact server SDK/Zod dependencies; implement command, stdio entry and one tool. Verify discovery.
+- [x] Write failing HTTP fixture call tests asserting authenticated wire contract, text/structured results, typed errors, remote metadata sanitization, default deadline and invalid input rejection without API requests.
+- [x] Implement minimal shared CLI result adapter. Run full `npm test` and commit.
 
 ### Task 2: MCP lifecycle and admission
 
@@ -43,8 +43,8 @@
 
 **Interfaces:** request abort signal joins process shutdown; one active operation enforced per server instance.
 
-- [ ] Write failing tests for concurrent `busy` response, request cancellation, client EOF, and signal shutdown during an unfinished response. Verify requests close promptly and a subsequent call succeeds after cancellation.
-- [ ] Implement cancellation/shutdown/admission with cleanup in `finally`. Run full `npm test` and commit.
+- [x] Write failing tests for concurrent `busy` response, request cancellation, client EOF, and signal shutdown during an unfinished response. Verify requests close promptly and a subsequent call succeeds after cancellation.
+- [x] Implement cancellation/shutdown/admission with cleanup in `finally`. Run full `npm test` and commit.
 
 ### Task 3: Installable tarball and user documentation
 
@@ -52,7 +52,7 @@
 
 **Interfaces:** `npm run test:package` creates a tarball, installs it into a temporary project with production dependencies only, and exercises installed CLI/MCP.
 
-- [ ] Write failing integration that inspects actual tarball entries, requires exclusion of tests/source/fixtures, installs offline, invokes installed version/doctor and completes an MCP handshake.
-- [ ] Add runtime allowlist and build-on-pack lifecycle. Verify package integration and full project/browser suites.
-- [ ] Document MCP setup, limits, untrusted page content and tarball installation; add package check to CI.
+- [x] Write failing integration that inspects actual tarball entries, requires exclusion of tests/source/fixtures, installs offline, invokes installed version/doctor and completes an MCP handshake.
+- [x] Add runtime allowlist and build-on-pack lifecycle. Verify package integration and full project/browser suites.
+- [x] Document MCP setup, limits, untrusted page content and tarball installation; add package check to CI.
 - [ ] Obtain fresh independent whole-branch review, fix material findings using RED/GREEN, and create/attach a draft PR based on CLI PR #4.
