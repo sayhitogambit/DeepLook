@@ -1,4 +1,7 @@
 import { helpText, parseCommand } from "./command.js";
+import { readFile } from "node:fs/promises";
+import { diagnose } from "./doctor.js";
+import { createRemoteOpener, remoteConfiguration, RemoteApiError, type RemoteApiErrorCode } from "./remoteApi.js";
 import type { OpenedPage } from "./openPage.js";
 import { pageProblem, type PageProblem } from "./pageResult.js";
 
@@ -14,7 +17,7 @@ export type PageOpener = (url: string, timeoutMs: number, signal: AbortSignal) =
 type MachineError = {
   version: 1;
   ok: false;
-  error: "challenge" | "access_wall" | "empty_content" | "upstream_http" | "timeout" | "navigation_failed";
+  error: RemoteApiErrorCode | "upstream_http";
   message: string;
   finalUrl?: string;
   title?: string;
@@ -24,6 +27,17 @@ type MachineError = {
 export async function runCli(argv: readonly string[], open: PageOpener, io: CliIO): Promise<number> {
   const command = parseCommand(argv);
   switch (command.kind) {
+    case "doctor": {
+      const report = await diagnose();
+      io.stdout.write(command.json ? `${JSON.stringify(report)}\n` :
+        report.checks.map((check) => `${check.ok ? "OK" : "FAIL"} ${check.name}: ${check.message}${check.version ? ` ${check.version}` : ""}\n`).join(""));
+      return report.ok ? 0 : 1;
+    }
+    case "version": {
+      const installed = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
+      io.stdout.write(`${installed.version}\n`);
+      return 0;
+    }
     case "help":
       io.stdout.write(helpText);
       return 0;
@@ -36,7 +50,9 @@ export async function runCli(argv: readonly string[], open: PageOpener, io: CliI
       io.signals.on("SIGTERM", abort);
       io.signals.on("SIGINT", abort);
       try {
-        const page = await open(command.url, command.timeoutMs, controller.signal);
+        const configuration = remoteConfiguration();
+        const opener = configuration ? createRemoteOpener(configuration) : open;
+        const page = await opener(command.url, command.timeoutMs, controller.signal);
         const problem = pageProblem(page);
         if (problem !== undefined) {
           writeFailure(io, command.format === "machine", pageFailure(page, problem));
@@ -62,7 +78,7 @@ export async function runCli(argv: readonly string[], open: PageOpener, io: CliI
         const error: MachineError = {
           version: 1,
           ok: false,
-          error: isTimeout(cause) ? "timeout" : "navigation_failed",
+          error: failureCode(cause),
           message: cause instanceof Error ? cause.message : String(cause),
         };
         writeFailure(io, command.format === "machine", error);
@@ -77,6 +93,11 @@ export async function runCli(argv: readonly string[], open: PageOpener, io: CliI
       return unexpected;
     }
   }
+}
+
+function failureCode(cause: unknown): MachineError["error"] {
+  if (cause instanceof RemoteApiError) return cause.code;
+  return isTimeout(cause) ? "timeout" : "navigation_failed";
 }
 
 function pageFailure(page: OpenedPage, problem: PageProblem): MachineError {

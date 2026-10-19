@@ -17,6 +17,23 @@ npm test
 npm run test:browser
 ```
 
+## CLI diagnostics and remote API
+
+`node dist/cli.js --version` prints the installed package version. `node dist/cli.js doctor` reports whether the configured Chrome executable responds to a bounded `--version` probe. Add `--json` for structured diagnostics; a failed check exits 1. This local probe checks the executable, not sandbox readiness or a successful page navigation.
+
+Set `DEEPLOOK_API_URL` to use an existing DeepLook API instead of launching local Chrome. Store its browser key in `DEEPLOOK_API_TOKEN` in your private environment. HTTPS is required outside loopback; URL credentials, query strings, and fragments are rejected. A reverse-proxy path prefix is supported. Without `DEEPLOOK_API_URL`, `open` keeps using local Chrome.
+
+```bash
+export DEEPLOOK_API_URL=https://your-api.example
+# Supply DEEPLOOK_API_TOKEN through your private secret environment.
+node dist/cli.js doctor --json
+node dist/cli.js open https://example.com --machine --timeout-ms 30000
+```
+
+Remote `doctor` calls `GET /health` with the configured bearer credential. It checks API liveness only; that endpoint does not verify browser execution, token permissions, or quota. Remote `open` calls `POST /v1/open` and preserves text, JSON, and machine success output. Machine failures also preserve API `invalid_request`, `unauthorized`, `quota_exceeded`, and `busy` errors. Credentials are never accepted as command flags or forwarded across API redirects, and server error messages are replaced with safe local messages.
+
+API requests have a deadline covering response-body reading and a two-megabyte response cap. A remote failure is reported without falling back to local Chrome. This repository still requires building from source; a public npm release and the MCP integration are separate roadmap items.
+
 Text output is the visible page text. `--json` returns the final URL, title, upstream HTTP status, and the browser details observed by the page. Set `DEEPLOOK_CHROME` to a Chrome binary if it is not at `/opt/google/chrome/chrome` or `/usr/bin/google-chrome-stable`.
 
 The CLI accepts `--timeout-ms <milliseconds>` from 1 to 120000; the default is 30000. One operation deadline covers DNS, Chrome startup, navigation, and text extraction. Cleanup follows the deadline: Chrome gets up to two seconds to close gracefully before its owned process is killed. Browser requests reject private, local, and metadata destinations, including redirects and page resources. Each connection uses a checked, pinned DNS answer. Challenge pages, recognized access gates, empty/invisible-only text, and upstream HTTP errors exit unsuccessfully; their page text is never printed.
