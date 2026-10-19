@@ -55,4 +55,4 @@
 - [x] Write failing integration that inspects actual tarball entries, requires exclusion of tests/source/fixtures, installs offline, invokes installed version/doctor and completes an MCP handshake.
 - [x] Add runtime allowlist and build-on-pack lifecycle. Verify package integration and full project/browser suites.
 - [x] Document MCP setup, limits, untrusted page content and tarball installation; add package check to CI.
-- [ ] Obtain fresh independent whole-branch review, fix material findings using RED/GREEN, and create/attach a draft PR based on CLI PR #4.
+- [x] Obtain fresh independent whole-branch review, fix material findings using RED/GREEN, and create/attach a draft PR based on CLI PR #4.

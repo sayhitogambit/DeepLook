@@ -69,7 +69,7 @@ deeplook --version
 deeplook doctor --json
 ```
 
-The installed `deeplook mcp` command can replace the `node` command and absolute script path above. `npm run test:package` verifies packing from a source tree with no built files, offline installation into an empty project with production dependencies only, and the installed CLI/MCP handshake. Its offline installation uses dependencies cached by the checkout's initial `npm ci`.
+The installed `deeplook mcp` command can replace the `node` command and absolute script path above. `npm run test:package` verifies packing from a source tree with no built files, offline installation into an empty project with production dependencies only, and the installed CLI/MCP handshake. Its offline installation uses dependency archives cached by the checkout's initial `npm ci` and a temporary consumer lockfile derived from pinned production resolutions; it does not require cached registry metadata.
 
 The repository and package remain private. Open-source license selection, repository publication, and registry release are still pending; there is no public npm installation command yet. This milestone prepares and tests the artifact without publishing it.
 
