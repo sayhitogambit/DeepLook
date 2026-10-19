@@ -27,6 +27,11 @@ type MachineError = {
 export async function runCli(argv: readonly string[], open: PageOpener, io: CliIO): Promise<number> {
   const command = parseCommand(argv);
   switch (command.kind) {
+    case "mcp": {
+      const { runMcp } = await import("./mcp.js");
+      await runMcp(open);
+      return 0;
+    }
     case "doctor": {
       const report = await diagnose();
       io.stdout.write(command.json ? `${JSON.stringify(report)}\n` :

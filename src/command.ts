@@ -5,6 +5,7 @@ export type OutputFormat = "text" | "json" | "machine";
 export type Command =
   | { kind: "help" }
   | { kind: "version" }
+  | { kind: "mcp" }
   | { kind: "doctor"; json: boolean }
   | { kind: "error"; message: string }
   | {
@@ -22,6 +23,7 @@ export function parseCommand(argv: readonly string[]): Command {
     return { kind: "help" };
   }
   if (args[0] === "--version") return { kind: "version" };
+  if (args[0] === "mcp" && args.length === 1) return { kind: "mcp" };
   if (args[0] === "doctor") {
     if (args.length > 2 || (args[1] !== undefined && args[1] !== "--json")) {
       return { kind: "error", message: "Usage: deeplook doctor [--json]" };

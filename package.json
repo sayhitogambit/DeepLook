@@ -17,9 +17,12 @@
     "node": ">=22.14"
   },
   "dependencies": {
-    "playwright-core": "1.56.1"
+    "@modelcontextprotocol/server": "2.3.1",
+    "playwright-core": "1.56.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
     "@types/node": "22.19.0",
     "typescript": "5.9.3"
   }
