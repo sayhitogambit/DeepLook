@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { createServer, type RequestListener } from "node:http";
@@ -7,10 +10,10 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { browserEnvironment } from "./runtimeEnvironment.js";
 
-async function session(env: Record<string, string> = {}) {
+async function session(env: Record<string, string> = {}, args = [fileURLToPath(new URL("./cli.js", import.meta.url)), "mcp"]) {
   const client = new Client({ name: "deeplook-test", version: "1.0.0" });
   const transport = new StdioClientTransport({
-    command: process.execPath, args: [fileURLToPath(new URL("./cli.js", import.meta.url)), "mcp"],
+    command: process.execPath, args,
     env: { ...browserEnvironment(), DEEPLOOK_CHROME: "/deeplook-test/no-chrome", ...env }, stderr: "pipe",
   });
   let stderr = "";
@@ -20,6 +23,121 @@ async function session(env: Record<string, string> = {}) {
       "deeplook mcp must complete an MCP handshake");
     return { client, transport, stderr: () => stderr, close: () => client.close() };
   } catch (error) { await client.close(); throw error; }
+}
+
+function event() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+async function promptly(promise: Promise<unknown>, ms = 1_000): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try { return await Promise.race([promise.then(() => true),
+    new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), ms); })]); }
+  finally { clearTimeout(timer); }
+}
+
+test("mcp admits one read and releases admission after a timed-out read", async () => {
+  const started = event();
+  let requests = 0;
+  const connection = await fixture((_request, response) => {
+    requests++;
+    if (requests === 1) { response.writeHead(200); response.write('{"text":'); started.resolve(); }
+    else response.end(JSON.stringify(page));
+  });
+  const first = connection.client.callTool({ name: "deeplook_open",
+    arguments: { url: page.requestedUrl, timeoutMs: 1_500 } });
+  try {
+    assert.equal(await promptly(started.promise), true);
+    const busy = await connection.client.callTool({ name: "deeplook_open", arguments: { url: page.requestedUrl } });
+    assert.equal(busy.isError, true);
+    assert.equal((busy.structuredContent as Record<string, unknown>)?.error, "busy");
+    assert.equal(requests, 1, "a rejected concurrent call must not consume an API request");
+    assert.equal(((await first).structuredContent as Record<string, unknown>)?.error, "timeout");
+    const next = await connection.client.callTool({ name: "deeplook_open", arguments: { url: page.requestedUrl } });
+    assert.notEqual(next.isError, true);
+  } finally { await first.catch(() => {}); await connection.close(); }
+});
+
+test("mcp cancellation closes the upstream read and allows the next read", async () => {
+  const started = event();
+  const closed = event();
+  let requests = 0;
+  const connection = await fixture((_request, response) => {
+    if (++requests === 1) {
+      response.once("close", closed.resolve);
+      response.writeHead(200); response.write('{"text":'); started.resolve();
+    } else response.end(JSON.stringify(page));
+  });
+  const controller = new AbortController();
+  const canceled = connection.client.callTool({ name: "deeplook_open",
+    arguments: { url: page.requestedUrl, timeoutMs: 10_000 } }, { signal: controller.signal }).then(() => false, () => true);
+  try {
+    assert.equal(await promptly(started.promise), true);
+    controller.abort();
+    assert.equal(await canceled, true);
+    assert.equal(await promptly(closed.promise), true, "cancel must close the upstream before its 10-second deadline");
+    const next = await connection.client.callTool({ name: "deeplook_open", arguments: { url: page.requestedUrl } });
+    assert.notEqual(next.isError, true);
+  } finally { controller.abort(); await connection.close(); }
+});
+
+test("mcp client EOF aborts the upstream without requiring forced process termination", async () => {
+  const started = event();
+  const closed = event();
+  const connection = await fixture((_request, response) => {
+    response.once("close", closed.resolve);
+    response.writeHead(200); response.write('{"text":'); started.resolve();
+  });
+  const pending = connection.client.callTool({ name: "deeplook_open",
+    arguments: { url: page.requestedUrl, timeoutMs: 10_000 } }).catch(() => {});
+  try {
+    assert.equal(await promptly(started.promise), true);
+    const closing = connection.client.close();
+    assert.equal(await promptly(closed.promise), true, "EOF must abort before the SDK's forced-kill fallback");
+    await closing;
+  } finally { await connection.close(); await pending; }
+});
+
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  test(`mcp ${signal} propagates cancellation and lets an owned subprocess exit`, { skip: process.platform === "win32" }, async () => {
+    const directory = await mkdtemp(join(tmpdir(), "deeplook-mcp-shutdown-"));
+    const host = join(directory, "host.mjs");
+    const pidFile = join(directory, "child.pid");
+    await writeFile(host, `import { runMcp } from ${JSON.stringify(new URL("./mcp.js", import.meta.url).href)};
+import { spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
+await runMcp(async (_url, _timeout, signal) => {
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));
+  return new Promise((_resolve, reject) => {
+    signal.addEventListener("abort", () => child.kill("SIGKILL"), { once: true });
+    child.once("close", () => reject(new Error("Canceled")));
+  });
+});
+`);
+    let pid: number | undefined;
+    const connection = await session({}, [host]);
+    const pending = connection.client.callTool({ name: "deeplook_open", arguments: { url: page.requestedUrl } }).catch(() => {});
+    try {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        try { pid = Number(await readFile(pidFile, "utf8")); break; } catch { await delay(10); }
+      }
+      assert.ok(pid, "the page opener must have started its owned subprocess");
+      process.kill(connection.transport.pid!, signal);
+      let gone = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        try { process.kill(pid, 0); } catch { gone = true; break; }
+        await delay(10);
+      }
+      assert.equal(gone, true, "shutdown must abort the opener so it can reap its owned subprocess");
+    } finally {
+      if (pid) { try { process.kill(pid, "SIGKILL"); } catch {} }
+      await connection.close(); await pending;
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 }
 
 async function fixture(handler: RequestListener) {
