@@ -9,7 +9,15 @@
   },
   "files": [
     "dist/*.js",
-    "!dist/*.test.js"
+    "!dist/*.test.js",
+    "README*.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "docs/*.md",
+    "docs/assets/readme-banner-v1/deeplook-readme-*-v1.png",
+    "SECURITY.md",
+    "CONTRIBUTING.md"
   ],
   "scripts": {
     "build": "tsc",
@@ -31,5 +39,15 @@
     "@modelcontextprotocol/client": "2.3.1",
     "@types/node": "22.19.0",
     "typescript": "5.9.3"
+  },
+  "license": "Apache-2.0",
+  "author": "DeepLook contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sayhitogambit/DeepLook.git"
+  },
+  "homepage": "https://github.com/sayhitogambit/DeepLook#readme",
+  "bugs": {
+    "url": "https://github.com/sayhitogambit/DeepLook/issues"
   }
 }

@@ -30,7 +30,7 @@ test("tarball builds from source and installs an independent CLI and MCP", {
   });
   try {
     await mkdir(source); await mkdir(destination);
-    for (const file of ["package.json", "package-lock.json", "tsconfig.json", "README.md", "src"]) {
+    for (const file of ["package.json", "package-lock.json", "tsconfig.json", "README.md", "README.pt-BR.md", "README.zh-CN.md", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "SECURITY.md", "CONTRIBUTING.md", "docs", "src"]) {
       await cp(join(root, file), join(source, file), { recursive: true });
     }
     await symlink(join(root, "node_modules"), join(source, "node_modules"), "junction");
@@ -41,9 +41,16 @@ test("tarball builds from source and installs an independent CLI and MCP", {
     assert.ok(paths.includes("dist/cli.js"), "pack must compile the CLI from a source tree without dist");
     assert.ok(paths.includes("dist/mcp.js"));
     assert.ok(paths.includes("README.md"));
-    assert.ok(paths.every((path) => path === "package.json" || path === "README.md" ||
+    assert.ok(paths.includes("LICENSE"), "distributable must include the open-source license");
+    assert.ok(paths.includes("NOTICE"), "distributable must retain the project notice");
+    assert.ok(paths.includes("docs/getting-started.md"), "installed README setup link must resolve");
+    assert.ok(paths.includes("docs/assets/readme-banner-v1/deeplook-readme-en-v1.png"), "installed README banner must be included");
+    assert.ok(paths.every((path) => path === "package.json" || /^README(?:\.[a-zA-Z-]+)?\.md$/.test(path) ||
+      path === "LICENSE" || path === "NOTICE" || path === "THIRD_PARTY_NOTICES.md" ||
+      path === "SECURITY.md" || path === "CONTRIBUTING.md" ||
+      /^docs\/[^/]+\.md$/.test(path) || /^docs\/assets\/readme-banner-v1\/deeplook-readme-[a-zA-Z-]+-v1\.png$/.test(path) ||
       (path.startsWith("dist/") && path.endsWith(".js") && !path.endsWith(".test.js"))),
-    `tarball must contain runtime files only: ${JSON.stringify(paths)}`);
+    `tarball must contain only runtime, documentation and license files: ${JSON.stringify(paths)}`);
     // npm ci caches dependency archives without registry version metadata.
     // Carry pinned production resolutions into the temporary consumer lock so
     // its offline install needs archives only, even with a freshly seeded cache.

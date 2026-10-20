@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=2400, initial-scale=1">
+<title>DeepLook — README banner</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:2400px;height:800px;overflow:hidden}
+body{background:#f7f6f2;color:#11151a;font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased}
+.banner{position:relative;width:2400px;height:800px;overflow:hidden}
+.illustration{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.logo{position:absolute;left:78px;top:21px;width:620px;height:auto}
+.eyebrow{position:absolute;left:110px;top:237px;margin:0;font:18px/1.3 "Liberation Mono",monospace;letter-spacing:2.1px;color:#515650}
+h1{position:absolute;left:106px;top:294px;margin:0;font-size:108px;font-weight:500;line-height:1.015;letter-spacing:-5px}
+.description{position:absolute;left:110px;top:564px;margin:0;font-size:29px;line-height:1.4;letter-spacing:-.35px;color:#535650}
+.bottom-rule{position:absolute;left:110px;right:110px;top:696px;border-top:1px solid #171c1b26}
+.interfaces{position:absolute;left:110px;top:728px;margin:0;font:19px/1.3 "Liberation Mono",monospace;letter-spacing:.7px;color:#353c38}
+.website{position:absolute;right:110px;top:728px;margin:0;font:19px/1.3 "Liberation Mono",monospace;color:#535650}
+.release{position:absolute;right:110px;top:81px;display:flex;align-items:center;gap:13px;font:17px/1.3 "Liberation Mono",monospace;letter-spacing:1.5px;color:#515650}
+.release:before{content:"";width:9px;height:9px;border-radius:50%;background:#8c9c55}
+html[lang=zh-CN] body{font-family:"Noto Sans CJK SC",sans-serif}
+html[lang=zh-CN] h1{font-size:96px;line-height:1.17;letter-spacing:-2px}
+html[lang=zh-CN] .eyebrow,html[lang=zh-CN] .release{font-family:"Noto Sans CJK SC",sans-serif}
+</style>
+<main class="banner" aria-label="DeepLook README banner">
+  <img class="illustration" src="illustration.png" alt="">
+  <img class="logo" src="deeplook-logo-thin-v1.png" alt="DeepLook">
+  <div class="release" id="release">OPEN SOURCE</div>
+  <p class="eyebrow" id="eyebrow">A BROWSER FOR AI AGENTS</p>
+  <h1 id="headline">The web, ready<br>for your agents.</h1>
+  <p class="description" id="description">Real Chrome. Readable text. Structured JSON.</p>
+  <div class="bottom-rule"></div>
+  <p class="interfaces" id="interfaces">CLI&nbsp; / &nbsp;HTTP API&nbsp; / &nbsp;MCP</p>
+  <p class="website">getdeeplook.dev</p>
+</main>
+<script>
+if(new URLSearchParams(location.search).get('lang')==='pt-BR'){
+  document.documentElement.lang='pt-BR';
+  document.querySelector('#release').textContent='CÓDIGO ABERTO';
+  document.querySelector('#eyebrow').textContent='UM NAVEGADOR PARA AGENTES DE IA';
+  document.querySelector('#headline').innerHTML='A web, pronta<br>para seus agentes.';
+  document.querySelector('#description').textContent='Chrome real. Texto legível. JSON estruturado.';
+  document.querySelector('#interfaces').innerHTML='CLI&nbsp; / &nbsp;API HTTP&nbsp; / &nbsp;MCP';
+}
+if(new URLSearchParams(location.search).get('lang')==='zh-CN'){
+  document.documentElement.lang='zh-CN';
+  document.querySelector('.banner').setAttribute('aria-label','DeepLook 自述文件横幅');
+  document.querySelector('#release').textContent='开源';
+  document.querySelector('#eyebrow').textContent='面向 AI 智能体的浏览器';
+  document.querySelector('#headline').innerHTML='让网页内容<br>为智能体所用。';
+  document.querySelector('#description').textContent='真实 Chrome · 可读文本 · 结构化 JSON';
+}
+</script>
+</html>
