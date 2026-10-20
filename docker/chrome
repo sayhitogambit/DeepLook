@@ -1,0 +1,5 @@
+#!/bin/sh
+# Container entry for stock Chrome. Docker's default seccomp profile blocks the
+# namespace sandbox, so the sandbox is disabled here and the process runs as a
+# non-root user instead. No other flags are added.
+exec /opt/google/chrome/chrome --no-sandbox "$@"
