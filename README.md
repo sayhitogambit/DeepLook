@@ -8,6 +8,8 @@
 
 [Get started](docs/getting-started.md) · [Credentials & self-hosting](docs/credentials.md) · [Technical reference](docs/reference.md) · [Contribute](CONTRIBUTING.md)
 
+Hosted API: [create an account and generate your own key](https://getdeeplook.dev/account.html). Confirm your email, create a named key, and use `https://api.getdeeplook.dev/v1/open`. Keys can be rotated or revoked from your account. Local and self-hosted installation instructions follow below.
+
 ## Choose how to read
 
 | Interface | What it does | What you need |

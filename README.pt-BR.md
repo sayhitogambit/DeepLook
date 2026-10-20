@@ -8,6 +8,8 @@
 
 [Primeiros passos](docs/getting-started.md) · [Credenciais e hospedagem própria](docs/credentials.md) · [Referência técnica](docs/reference.md) · [Contribuir](CONTRIBUTING.md) — guias detalhados em inglês.
 
+API hospedada: [crie sua conta e gere sua própria chave](https://getdeeplook.dev/pt/account.html). Confirme seu e-mail, crie uma chave com nome e use `https://api.getdeeplook.dev/v1/open`. Você pode rotacionar e revogar chaves na sua conta. As instruções para uso local e hospedagem própria estão abaixo.
+
 ## Escolha como ler
 
 | Interface | O que faz | O que você precisa |

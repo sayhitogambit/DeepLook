@@ -8,6 +8,8 @@
 
 [快速入门](docs/getting-started.md) · [凭据与自行部署](docs/credentials.md) · [技术参考](docs/reference.md) · [参与贡献](CONTRIBUTING.md) — 详细指南以英文提供。
 
+托管 API：[注册账户并生成自己的密钥](https://getdeeplook.dev/account.html)。验证邮箱后，创建命名密钥并调用 `https://api.getdeeplook.dev/v1/open`。你可以在账户中轮换或撤销密钥。下方提供本地使用和自行部署的说明。
+
 ## 选择读取方式
 
 | 接口 | 功能 | 所需条件 |
