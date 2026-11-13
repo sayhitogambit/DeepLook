@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { request } from "node:http";
+import { connect as tcpConnect } from "node:net";
 import test from "node:test";
 
 import { startSafeProxy } from "./safeProxy.js";
@@ -79,6 +80,34 @@ test("browser proxy rejects a private HTTPS tunnel", async () => {
     });
     assert.equal(result, 403);
   } finally {
+    await proxy.close();
+  }
+});
+
+test("browser proxy tolerates a tunnel disconnect while DNS validation is pending", async () => {
+  let beginResolution!: () => void;
+  let finishResolution!: (addresses: Awaited<ReturnType<AddressResolver>>) => void;
+  const resolutionStarted = new Promise<void>((resolve) => { beginResolution = resolve; });
+  const resolver: AddressResolver = () => {
+    beginResolution();
+    return new Promise((resolve) => { finishResolution = resolve; });
+  };
+  const proxy = await startSafeProxy(resolver);
+  const client = tcpConnect(Number(new URL(proxy.url).port), "127.0.0.1");
+  client.on("error", () => undefined);
+
+  try {
+    await new Promise<void>((resolve) => {
+      client.once("connect", () => client.write(
+        "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n",
+        () => resolve(),
+      ));
+    });
+    await resolutionStarted;
+    client.destroy();
+    finishResolution([{ address: "93.184.216.34", family: 4 }]);
+  } finally {
+    client.destroy();
     await proxy.close();
   }
 });

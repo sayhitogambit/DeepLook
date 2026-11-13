@@ -1,5 +1,5 @@
 import { createServer, request as httpRequest, type ClientRequest, type IncomingHttpHeaders, type Server } from "node:http";
-import { connect as tcpConnect } from "node:net";
+import { connect as tcpConnect, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 
 import {
@@ -19,6 +19,13 @@ export async function startSafeProxy(
   const requests = new Set<ClientRequest>();
   let closed = false;
   const server: Server = createServer((request, response) => {
+    let upstream: ClientRequest | undefined;
+    request.on("error", () => {
+      upstream?.destroy();
+      if (!response.destroyed) response.destroy();
+    });
+    response.on("error", () => upstream?.destroy());
+    response.on("close", () => upstream?.destroy());
     void (async () => {
       try {
         const target = await validatePublicUrl(request.url ?? "", resolveAddresses);
@@ -27,7 +34,7 @@ export async function startSafeProxy(
         const headers: IncomingHttpHeaders = { ...request.headers, host: target.url.host };
         delete headers["proxy-authorization"];
         delete headers["proxy-connection"];
-        const upstream = httpRequest({
+        const upstreamRequest = httpRequest({
           host: target.address,
           port: target.port,
           method: request.method,
@@ -35,17 +42,19 @@ export async function startSafeProxy(
           headers,
         }, (upstreamResponse) => {
           if (response.destroyed) { upstreamResponse.destroy(); return; }
+          upstreamResponse.on("error", () => response.destroy());
           response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
           upstreamResponse.pipe(response);
         });
-        requests.add(upstream);
-        upstream.once("close", () => requests.delete(upstream));
-        upstream.on("error", () => {
+        upstream = upstreamRequest;
+        requests.add(upstreamRequest);
+        upstreamRequest.once("close", () => requests.delete(upstreamRequest));
+        upstreamRequest.on("error", () => {
+          if (response.destroyed) return;
           if (!response.headersSent) response.writeHead(502);
           response.end();
         });
-        response.on("close", () => upstream.destroy());
-        request.pipe(upstream);
+        request.pipe(upstreamRequest);
       } catch {
         if (!response.destroyed) {
           response.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
@@ -56,36 +65,43 @@ export async function startSafeProxy(
   });
 
   server.on("connect", (request, client, head) => {
+    let upstream: Socket | undefined;
     tunnels.add(client);
-    client.once("close", () => tunnels.delete(client));
+    const closeUpstream = () => upstream?.destroy();
+    client.on("error", closeUpstream);
+    client.once("close", () => {
+      tunnels.delete(client);
+      closeUpstream();
+    });
+    request.on("error", closeUpstream);
     void (async () => {
       try {
         const target = await validatePublicUrl(`https://${request.url ?? ""}`, resolveAddresses);
         if (closed || client.destroyed) return;
         if (target.port !== 443) throw new Error("Invalid CONNECT target.");
-        const upstream = tcpConnect({ host: target.address, port: target.port });
-        tunnels.add(upstream);
-        upstream.once("close", () => tunnels.delete(upstream));
-        upstream.setTimeout(30_000, () => upstream.destroy());
-        client.once("close", () => upstream.destroy());
-        client.on("error", () => upstream.destroy());
-        upstream.on("error", () => {
+        const upstreamSocket = tcpConnect({ host: target.address, port: target.port });
+        upstream = upstreamSocket;
+        tunnels.add(upstreamSocket);
+        upstreamSocket.once("close", () => tunnels.delete(upstreamSocket));
+        upstreamSocket.setTimeout(30_000, () => upstreamSocket.destroy());
+        upstreamSocket.on("error", () => {
           if (!client.destroyed) client.destroy();
         });
-        upstream.once("connect", () => {
+        upstreamSocket.once("connect", () => {
           if (client.destroyed) {
-            upstream.destroy();
+            upstreamSocket.destroy();
             return;
           }
           client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-          if (head.length > 0) upstream.write(head);
-          client.pipe(upstream).pipe(client);
+          if (head.length > 0) upstreamSocket.write(head);
+          client.pipe(upstreamSocket).pipe(client);
         });
       } catch {
         client.end("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
       }
     })();
   });
+  server.on("clientError", (_error, socket) => socket.destroy());
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
