@@ -87,3 +87,5 @@ On `SIGTERM` or `SIGINT`, the CLI aborts the browser operation and waits for Chr
 ## Browser profile
 
 Launch uses stock Chrome with a coherent profile: `en-US`, `America/New_York`, language `en-US,en`, and a 1366×768 viewport. It drops Playwright's `--enable-automation` and `--enable-unsafe-swiftshader` defaults and does not pass `--test-type`. Canvas, WebGL, audio, and fonts remain what the Chrome build exposes.
+
+When `DISPLAY` is set, Chrome runs on that X server instead of Playwright's headless mode. Headless mode puts `HeadlessChrome` in worker user agents and starts the GPU process with `--use-angle=swiftshader-webgl`; display mode keeps the binary's own user agent for both pages and workers and does not opt into SwiftShader. Without `DISPLAY`, the page user agent keeps the launched Chrome major version and the host platform, without the `HeadlessChrome` token.

@@ -13,13 +13,16 @@ export const stealthProfile = {
 /**
  * Playwright defaults that advertise an automated browser.
  * `--enable-automation` sets `navigator.webdriver`.
- * `--enable-unsafe-swiftshader` forces a software WebGL renderer real Chrome
- * sessions do not advertise.
+ * `--enable-unsafe-swiftshader` opts Chrome into the SwiftShader WebGL
+ * renderer. Headless mode adds that renderer on its own, so the flag is
+ * still dropped and display mode is used instead when a display exists.
  */
 export const ignoredAutomationArgs = [
   "--enable-automation",
   "--enable-unsafe-swiftshader",
 ] as const;
+
+export type LaunchMode = "display" | "headless";
 
 const chromeCandidates = [
   "/opt/google/chrome/chrome",
@@ -57,11 +60,28 @@ export function chromeUserAgent(browserVersion: string): string {
   return `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
 }
 
-/** Launch flags for stock Chrome. These are not a patched browser. */
-export function chromeLaunchArgs(): string[] {
-  return [
+/**
+ * Launch flags for stock Chrome. These are not a patched browser.
+ * Display mode runs on the X server in `DISPLAY` so Chrome does not enter
+ * its headless ozone path, which forces `--use-angle=swiftshader-webgl`
+ * and a `HeadlessChrome` user agent in workers.
+ */
+export function chromeLaunchArgs(mode: LaunchMode = "headless"): string[] {
+  const args = [
     "--disable-blink-features=AutomationControlled",
     `--lang=${stealthProfile.locale}`,
     "--disable-dev-shm-usage",
+    `--window-size=${stealthProfile.viewport.width},${stealthProfile.viewport.height}`,
   ];
+  if (mode === "display") {
+    args.push(
+      "--ozone-platform=x11",
+      "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
+    );
+  }
+  return args;
+}
+
+export function launchMode(): LaunchMode {
+  return process.env.DISPLAY !== undefined && process.env.DISPLAY.length > 0 ? "display" : "headless";
 }

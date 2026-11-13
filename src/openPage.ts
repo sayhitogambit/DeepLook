@@ -4,6 +4,7 @@ import {
   chromeLaunchArgs,
   chromeUserAgent,
   ignoredAutomationArgs,
+  launchMode,
   resolveChromeExecutable,
   stealthProfile,
 } from "./profile.js";
@@ -68,6 +69,7 @@ async function openWithDependencies(
   url: string, timeoutMs: number, signal: AbortSignal | undefined, dependencies: Dependencies,
 ): Promise<OpenedPage> {
   const operation = new Operation(timeoutMs, signal);
+  const mode = launchMode();
   let failed = false;
   try {
     operation.signal.throwIfAborted();
@@ -76,13 +78,13 @@ async function openWithDependencies(
     const executablePath = await operation.wait(dependencies.resolveExecutable());
     const server = await operation.acquire(dependencies.launch({
       executablePath,
-      headless: true,
+      headless: mode === "headless",
       host: "127.0.0.1",
       chromiumSandbox: true,
       env: browserEnvironment(),
       timeout: operation.remainingMs(),
       ignoreDefaultArgs: [...ignoredAutomationArgs],
-      args: [...chromeLaunchArgs(), "--proxy-bypass-list=<-loopback>"],
+      args: [...chromeLaunchArgs(mode), "--proxy-bypass-list=<-loopback>"],
     }), closeBrowserServer);
     const browser = await operation.wait(dependencies.connect(server.wsEndpoint(), { timeout: operation.remainingMs() }));
     const context = await operation.wait(browser.newContext({
@@ -92,7 +94,7 @@ async function openWithDependencies(
       timezoneId: stealthProfile.timezoneId,
       viewport: { ...stealthProfile.viewport },
       colorScheme: stealthProfile.colorScheme,
-      userAgent: chromeUserAgent(browser.version()),
+      userAgent: mode === "headless" ? chromeUserAgent(browser.version()) : undefined,
       extraHTTPHeaders: { "Accept-Language": stealthProfile.acceptLanguage },
     }));
     await operation.wait(context.route("**/*", async (route) => {
